@@ -1,0 +1,37 @@
+# Secrets — NUNCA commitear
+secrets.toml
+.streamlit/secrets.toml
+*.toml.local
+.env
+.env.local
+.env.*.local
+
+# API keys
+*api*key*
+*API*KEY*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+
+# Outputs (opcional: descomentar si no quieres versionar resultados)
+# Output/*.xlsx
+
+# HU Speed Analysis (aprendizaje local por máquina)
+.hu_analyzer_speed.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

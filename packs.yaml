@@ -1,0 +1,10 @@
+# Streamlit Community Cloud — configuración de despliegue
+# https://docs.streamlit.io/streamlit-community-cloud/get-started/deploy-an-app
+
+# App principal
+streamlit:
+  scriptPath: app.py
+
+# Variables de entorno (la API key va en Secrets, no aquí)
+# env:
+#   HU_ANALYZER_PRODUCTION: "1"

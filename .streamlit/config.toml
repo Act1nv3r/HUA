@@ -1,0 +1,20 @@
+# Actinver Brandbook 2025 — Look & Feel
+
+[client]
+showSidebarNavigation = false
+
+[theme]
+base = "dark"
+primaryColor = "#E6C78A"
+backgroundColor = "#0A0E12"
+secondaryBackgroundColor = "#1A2433"
+textColor = "#FFFFFF"
+font = "sans serif"
+
+[server]
+headless = true
+fileWatcherType = "none"
+disconnectedSessionTTL = 300
+maxUploadSize = 50
+maxMessageSize = 50
+enableWebsocketCompression = false
