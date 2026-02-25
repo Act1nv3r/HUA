@@ -225,6 +225,7 @@ El flujo completo se arma con todas las HUs. Evalúa qué es razonable para ESTA
 (no penalices por info que puede estar en otra etapa posterior o anterior).
 
 ═══ HISTORIA DE USUARIO ═══
+(Se incluye toda la información de la fila; usa todas las columnas presentes para el análisis.)
 {hu_text}
 ═══════════════════════════
 {prev_block}
@@ -250,7 +251,10 @@ Evalúa las 6 dimensiones (score 0-10) desde lo que el PO debe definir:
    hace referencia a toda la parte regulatoria, valórala positivamente.
 
 6. CRITERIOS DE ACEPTACIÓN (7%): ¿El PO definió criterios testeables y medibles?
+   Incluye también la columna "Reglas de Negocio" (si existe) como parte de esta dimensión.
    Solo si aplica a esta etapa. No exigir en cada HU si el flujo completo los tiene.
+
+IMPORTANTE: En los campos de texto (resumen, brechas, etc.) NO uses comillas dobles (") dentro de las cadenas; usa comillas simples o evita las comillas para que el JSON sea válido.
 
 Responde SOLO con este JSON exacto (sin markdown, sin bloques ```, sin texto extra):
 {{
@@ -291,6 +295,7 @@ Tienes el resumen del análisis de HUs por iniciativa. Para CADA iniciativa debe
 4. Sea directo y ejecutivo — como si respondieras en 30 segundos en el elevador.
 
 Tono: profesional, constructivo, orientado a acción. Si todo va bien, dilo. Si hay riesgos o gaps, dilo sin dramatizar.
+IMPORTANTE: En analisis_ejecutivo NO uses comillas dobles (") dentro del texto; evítalas para que el JSON sea válido.
 Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después.
 
 Formato de respuesta:
@@ -679,8 +684,8 @@ def analyze_hu(client: anthropic.Anthropic, hu: dict, prev_data: dict = None, re
     for attempt in range(retries):
         try:
             msg = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1800,
+                model=getattr(sys.modules[__name__], "ACTIVE_MODEL", "claude-haiku-4-5-20251001"),
+                max_tokens=getattr(sys.modules[__name__], "ACTIVE_MAX_TOKENS", 900),
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": build_analysis_prompt(hu, prev_data)}]
             )
@@ -691,7 +696,15 @@ def analyze_hu(client: anthropic.Anthropic, hu: dict, prev_data: dict = None, re
                 lines = raw.split("\n")
                 raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
 
-            result = json.loads(raw)
+            # Parsear JSON; si falla (ej. string sin cerrar), intentar reparar con json_repair
+            try:
+                result = json.loads(raw)
+            except json.JSONDecodeError:
+                try:
+                    from json_repair import loads as json_repair_loads
+                    result = json_repair_loads(raw)
+                except Exception:
+                    raise
             scores = result.get("scores", {})
             result["score_total"] = compute_total_score(scores)
             result["nivel"] = score_to_level(result["score_total"])
@@ -797,7 +810,11 @@ def generate_executive_analysis(client: anthropic.Anthropic, by_sheet: dict[str,
         if raw.startswith("```"):
             lines = raw.split("\n")
             raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-        data = json.loads(raw)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            from json_repair import loads as json_repair_loads
+            data = json_repair_loads(raw)
         out = {}
         for item in data.get("iniciativas", []):
             nombre = item.get("nombre", "").strip()
@@ -814,6 +831,29 @@ def generate_executive_analysis(client: anthropic.Anthropic, by_sheet: dict[str,
 # 6. HELPERS DE ESTILOS EXCEL
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _sanitize_for_excel(value):
+    """
+    Elimina caracteres que rompen el XML de Excel (control chars, etc.).
+    Evita el error "¿Deseas que intentemos recuperar el contenido?"
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    s = str(value)
+    result = []
+    for c in s:
+        code = ord(c)
+        if code < 32 and c not in "\t\n\r":
+            continue
+        if 0xFFFE <= code <= 0xFFFF:
+            continue
+        if 0xD800 <= code <= 0xDFFF and not (0xDC00 <= code <= 0xDFFF):
+            continue
+        result.append(c)
+    return "".join(result)
+
+
 def _thin_border():
     s = Side(style="thin", color="D0D0D0")
     return Border(left=s, right=s, top=s, bottom=s)
@@ -823,21 +863,21 @@ def _thick_border():
     return Border(left=s, right=s, top=s, bottom=s)
 
 def _h1(cell, text, bg="1F3864"):
-    cell.value = text
+    cell.value = _sanitize_for_excel(text) if isinstance(text, str) else text
     cell.font = Font(bold=True, color="FFFFFF", name="Arial", size=12)
     cell.fill = PatternFill("solid", start_color=bg, end_color=bg)
     cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     cell.border = _thick_border()
 
 def _h2(cell, text, bg="2E75B6"):
-    cell.value = text
+    cell.value = _sanitize_for_excel(text) if isinstance(text, str) else text
     cell.font = Font(bold=True, color="FFFFFF", name="Arial", size=10)
     cell.fill = PatternFill("solid", start_color=bg, end_color=bg)
     cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     cell.border = _thin_border()
 
 def _data(cell, value, bold=False, bg=None, fc="000000", align="left", size=9):
-    cell.value = value
+    cell.value = _sanitize_for_excel(value) if isinstance(value, str) else value
     cell.font = Font(bold=bold, name="Arial", size=size, color=fc)
     cell.alignment = Alignment(horizontal=align, vertical="center", wrap_text=True)
     cell.border = _thin_border()
@@ -961,7 +1001,8 @@ def write_analysis_to_sheet(ws, results_by_row: dict):
 
         for i, value in enumerate(col_values):
             col = start_col + i
-            cell = ws.cell(row=row_idx, column=col, value=value)
+            safe_val = _sanitize_for_excel(value) if isinstance(value, str) else value
+            cell = ws.cell(row=row_idx, column=col, value=safe_val)
             cell.font = Font(name="Arial", size=9)
             cell.alignment = Alignment(vertical="top", wrap_text=True)
             cell.border = _thin_border()
@@ -984,7 +1025,7 @@ def write_analysis_to_sheet(ws, results_by_row: dict):
                 cell.font = Font(bold=True, name="Arial", size=10, color=fc)
                 cell.fill = PatternFill("solid", start_color=bg, end_color=bg)
                 cell.alignment = Alignment(horizontal="center", vertical="center")
-                cell.value = f"{value}/10"
+                cell.value = _sanitize_for_excel(f"{value}/10")
 
             elif i == 8:  # Capas tecnológicas involucradas
                 cell.font = Font(name="Arial", size=9, color="1F3864")
@@ -1106,23 +1147,25 @@ def create_synthesis_sheet(wb, all_results: list[dict]):
     _h1(ws[f"A{cur}"], "▌ B.  SCORES POR INICIATIVA Y DIMENSIÓN")
     cur += 1
 
-    # Sub-encabezados de tabla (Definición funcional + capas tecnológicas)
+    # Sub-encabezados de tabla (dinámicos según DIMENSIONS activas)
     ws.row_dimensions[cur].height = 50
+    dim_col_letters = ["D", "E", "F", "G", "H", "I"]
+    dim_keys = list(DIMENSIONS.keys())[:6]
     sub_hdrs = [
-        ("A", "#",                          "44546A"),
-        ("B", "INICIATIVA\n(Producto)",     "44546A"),
-        ("C", "SCORE TOTAL\n(0-100)",       "1F3864"),
-        ("D", "Funcional\n(0-10)\n35%",    "2E75B6"),
-        ("E", "Capas Tec.\n(0-10)\n25%",   "2E75B6"),
-        ("F", "UX/UI\n(0-10)\n15%",       "2E75B6"),
-        ("G", "Integr.\n(0-10)\n10%",     "2E75B6"),
-        ("H", "Regulat.\n(0-10)\n8%",     "2E75B6"),
-        ("I", "Criterios\n(0-10)\n7%",    "2E75B6"),
-        ("J", "",                           "FFFFFF"),
-        ("K", "NIVEL GENERAL",             "44546A"),
-        ("L", "",                           "FFFFFF"),
-        ("M", "HUs CON MAYOR OPORTUNIDAD DE MEJORA",  "7B2C2C"),
+        ("A", "#", "44546A"),
+        ("B", "INICIATIVA\n(Producto)", "44546A"),
+        ("C", "SCORE TOTAL\n(0-100)", "1F3864"),
     ]
+    for dk, col in zip(dim_keys, dim_col_letters):
+        w = int(DIMENSION_WEIGHTS.get(dk, 0) * 100)
+        short = (DIMENSIONS[dk].split(" ")[0] if DIMENSIONS[dk] else dk)[:10]
+        sub_hdrs.append((col, f"{short}\n(0-10)\n{w}%", "2E75B6"))
+    sub_hdrs.extend([
+        ("J", "", "FFFFFF"),
+        ("K", "NIVEL GENERAL", "44546A"),
+        ("L", "", "FFFFFF"),
+        ("M", "HUs CON MAYOR OPORTUNIDAD DE MEJORA", "7B2C2C"),
+    ])
     for col_l, txt, bg in sub_hdrs:
         _h2(ws[f"{col_l}{cur}"], txt, bg=bg)
     cur += 1
@@ -1130,10 +1173,7 @@ def create_synthesis_sheet(wb, all_results: list[dict]):
     row_fills = ["FFFFFF", "F5F8FF"]
     table_data_start = cur
 
-    dim_cols = [
-        ("funcional", "D"), ("capas_tec", "E"), ("ux_ui", "F"),
-        ("integraciones", "G"), ("regulatorio", "H"), ("criterios", "I"),
-    ]
+    dim_cols = list(zip(dim_keys, dim_col_letters[: len(dim_keys)]))
 
     for sheet_idx, (sheet_name, sheet_results) in enumerate(by_sheet.items(), 1):
         ws.row_dimensions[cur].height = 22
@@ -1181,7 +1221,7 @@ def create_synthesis_sheet(wb, all_results: list[dict]):
         ws[f"L{cur}"].fill = PatternFill("solid", start_color="1F3864", end_color="1F3864")
 
         cell_crit = ws[f"M{cur}"]
-        cell_crit.value = criticas_txt
+        cell_crit.value = _sanitize_for_excel(criticas_txt)
         cell_crit.font = Font(name="Arial", size=9,
                               color="375623" if criticas_txt == "✅ Ninguna" else "7B2C2C")
         cell_crit.fill = PatternFill("solid",
@@ -1294,7 +1334,7 @@ def create_synthesis_sheet(wb, all_results: list[dict]):
 
         ws.merge_cells(f"G{cur}:M{cur}")
         cell = ws[f"G{cur}"]
-        cell.value = brechas_txt
+        cell.value = _sanitize_for_excel(brechas_txt)
         is_clean = brechas_txt.startswith("✅")
         cell.font = Font(name="Arial", size=9,
                          color="375623" if is_clean else "7B2C2C")

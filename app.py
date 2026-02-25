@@ -139,6 +139,88 @@ st.markdown("""
 limit = None
 
 # ═══════════════════════════════════════════════════════════════════════════
+# VERSIONES DE EVALUACIÓN
+# ═══════════════════════════════════════════════════════════════════════════
+
+CONFIG_VERSIONS = {
+    "v1": {
+        "label":       "v1.0 — Evaluación Técnica Completa",
+        "badge_color": "#2E75B6",
+        "description": "Evalúa las 6 dimensiones técnicas. Ideal cuando el Tech Owner ya participó en la definición.",
+        "audience":    "Tech Owner + PO · Etapa: Refinamiento",
+        "model":       "claude-sonnet-4-20250514",
+        "max_tokens":  2000,
+        "dimensions": {
+            "funcional": "Definición Funcional",
+            "ux_ui":     "UX / UI & Frontend",
+            "backend":   "Backend & Microservicios",
+            "seguridad": "Seguridad & Regulatorio",
+            "qa":        "QA & Criterios de Prueba",
+            "negocio":   "Negocio & KPIs",
+        },
+        "weights": {
+            "funcional": 0.30,
+            "ux_ui":     0.15,
+            "backend":   0.25,
+            "seguridad": 0.15,
+            "qa":        0.10,
+            "negocio":   0.05,
+        },
+        "system_prompt": (
+            "Eres un Senior Fullstack Developer y Product Manager con 15 años "
+            "en banca digital mexicana. Evalúas Historias de Usuario del área de Productos "
+            "Digitales de Actinver, institución financiera regulada por CNBV, Banxico y SHCP. "
+            "Las HUs van a fábricas de desarrollo especializadas (Back/Micros, Arquitectura, "
+            "Front-end, QA) a través de prerefinamiento y refinamiento. Tu misión es detectar "
+            "exactamente qué falta para que el equipo técnico pueda estimar y construir sin "
+            "ambigüedades ni preguntas básicas durante el prerefinamiento. "
+            "Contexto de sistemas: Core bancario COBIS; integraciones RENAPO/INE/SAT/Buró/SPEI/"
+            "biométricos; regulatorio CUB Art.51 BIS 6/PUI/LFPDPPP/PLD-AML; "
+            "productos Onboarding N4/Cuenta Remunerada/Crédito Simple/TDC Actinver. "
+            "Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después del JSON."
+        ),
+    },
+    "v2": {
+        "label":       "v2.0 — Definición Funcional · PO",
+        "badge_color": "#375623",
+        "description": "Calibrada para POs nuevos. Evalúa solo lo que el PO puede controlar. El Tech Owner completa en refinamiento.",
+        "audience":    "PO + Analista Funcional · Etapa: Definición",
+        "model":       "claude-haiku-4-5-20251001",
+        "max_tokens":  1400,
+        "dimensions": {
+            "funcional": "Definición Funcional",
+            "flujo":     "Flujo Operativo",
+            "negocio":   "Negocio & Valor",
+            "ux_ui":     "UX / UI",
+            "backend":   "Backend & Integraciones",
+            "seguridad": "Seguridad & Regulatorio",
+        },
+        "weights": {
+            "funcional": 0.45,
+            "flujo":     0.25,
+            "negocio":   0.15,
+            "ux_ui":     0.08,
+            "backend":   0.04,
+            "seguridad": 0.03,
+        },
+        "system_prompt": (
+            "Eres un coach experto en metodologías ágiles y Product Management "
+            "en banca digital mexicana. Tu rol es guiar a Product Owners nuevos de Actinver "
+            "(institución financiera regulada por CNBV, Banxico y SHCP) para que definan "
+            "correctamente sus Historias de Usuario antes de entrar a sesiones de prerefinamiento. "
+            "CONTEXTO CLAVE: Los POs son nuevos y están aprendiendo a documentar HUs. "
+            "En esta etapa SOLO se evalúa la definición funcional. El detalle técnico "
+            "lo completará el Tech Owner en refinamiento. "
+            "Productos en scope: Onboarding N4, Cuenta Remunerada, Crédito Simple, TDC Actinver. "
+            "Regulatorio: CNBV/CUB, PLD/AML, LFPDPPP — solo verificar si aplica, sin detalles técnicos. "
+            "NO pidas al PO: endpoints, schemas de API, timeouts, cifrado, datos de prueba técnicos ni wireframes. "
+            "TONO: Directo, motivador y claro. Sin jerga técnica. "
+            "Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después del JSON."
+        ),
+    },
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # HEADER
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -324,6 +406,59 @@ if "summary" not in st.session_state:
     st.session_state.summary = None
 if "output_path" not in st.session_state:
     st.session_state.output_path = None
+if "selected_version" not in st.session_state:
+    st.session_state.selected_version = "v2"   # default: v2.0
+
+# ── Switch de versión ──────────────────────────────────────────────────────
+st.markdown("---")
+
+sw_col1, sw_col2, sw_col3 = st.columns([1, 2, 1])
+with sw_col2:
+    version_options = {
+        "v1": "🔵  v1.0 — Evaluación Técnica Completa",
+        "v2": "🟢  v2.0 — Definición Funcional · PO",
+    }
+    _ver = st.session_state.selected_version
+    _idx = list(version_options.keys()).index(_ver) if _ver in version_options else 1
+    selected_label = st.radio(
+        "Modo de evaluación",
+        options=list(version_options.values()),
+        index=_idx,
+        horizontal=True,
+        key="version_radio",
+        help="v1.0: evalúa las 6 dimensiones técnicas completas (Tech Owner incluido). v2.0: solo evalúa lo que el PO puede definir en esta etapa.",
+    )
+    # Sincronizar selección con session_state
+    for k, v in version_options.items():
+        if v == selected_label:
+            st.session_state.selected_version = k
+
+    cfg = CONFIG_VERSIONS[st.session_state.selected_version]
+
+    # Badge informativo de la versión activa
+    badge_html = f"""
+    <div style="
+        margin-top: 0.75rem;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        border-left: 4px solid {cfg['badge_color']};
+        background: rgba(26,36,51,0.8);
+        font-family: 'Poppins', sans-serif;
+    ">
+        <div style="font-size:0.8rem; color:#ADB5C2; margin-bottom:0.2rem;">
+            {cfg['audience']}
+        </div>
+        <div style="font-size:0.9rem; color:#FFFFFF;">
+            {cfg['description']}
+        </div>
+        <div style="font-size:0.75rem; color:#ADB5C2; margin-top:0.4rem;">
+            Modelo: <code style="color:{cfg['badge_color']};">{cfg['model']}</code>
+            &nbsp;·&nbsp; max_tokens: {cfg['max_tokens']}
+            &nbsp;·&nbsp; Dimensiones: {', '.join(cfg['dimensions'].keys())}
+        </div>
+    </div>
+    """
+    st.markdown(badge_html, unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
@@ -337,6 +472,16 @@ if analyze_btn and uploaded_file:
         st.stop()
 
     os.environ["ANTHROPIC_API_KEY"] = api_key
+
+    # ── Aplicar config de versión activa ──────────────────────────────────
+    import hu_analyzer as _hua
+    _cfg = CONFIG_VERSIONS[st.session_state.selected_version]
+    _hua.DIMENSIONS        = _cfg["dimensions"]
+    _hua.DIMENSION_WEIGHTS = _cfg["weights"]
+    _hua.SYSTEM_PROMPT     = _cfg["system_prompt"]
+    _hua.ACTIVE_MODEL      = _cfg["model"]
+    _hua.ACTIVE_MAX_TOKENS = _cfg["max_tokens"]
+
     effective_limit = limit
     if effective_limit is not None and effective_limit > MAX_HUS_PER_RUN:
         effective_limit = MAX_HUS_PER_RUN

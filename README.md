@@ -36,6 +36,10 @@ El resultado siempre es **un solo Excel consolidado** con todas las iniciativas 
 
 **Guía completa:** Ver [DEV.md](DEV.md)
 
+### Desplegar en Streamlit Cloud
+
+Para publicar la app en [share.streamlit.io](https://share.streamlit.io), sigue la guía paso a paso: **[DEPLOY.md](DEPLOY.md)**
+
 ---
 
 ## ¿Qué evalúa? (enfoque funcional)

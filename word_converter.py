@@ -17,6 +17,7 @@ STANDARD_HEADERS = [
     "Titulo",
     "Descripción",
     "Criterios de aceptación",
+    "Reglas de Negocio",
     "Notas",
 ]
 
@@ -45,10 +46,10 @@ HEADER_ALIASES = {
     "criterios de aceptación": "Criterios de aceptación",
     "criterios": "Criterios de aceptación",
     "aceptación": "Criterios de aceptación",
+    "reglas de negocio": "Reglas de Negocio",
     "notas": "Notas",
     "observaciones": "Notas",
     "comentarios": "Notas",
-    "reglas de negocio": "Notas",
     "requerimientos ux/ui": "Notas",
 }
 
@@ -57,7 +58,8 @@ HEADER_ALIASES = {
 DESC_KEYWORDS = ("descripción", "descripcion", "historia", "objetivo", "definición", "definicion", "contenido")
 TITLE_KEYWORDS = ("titulo", "título", "etapa", "módulo", "modulo")
 CRITERIA_KEYWORDS = ("criterios", "aceptación", "aceptacion")
-NOTES_KEYWORDS = ("notas", "observaciones", "comentarios", "reglas")
+REGLA_KEYWORDS = ("reglas", "negocio")
+NOTES_KEYWORDS = ("notas", "observaciones", "comentarios")
 
 
 def _normalize_header(h: str) -> str:
@@ -130,9 +132,9 @@ def _extract_from_tables(doc: Document) -> tuple[list[str], list[dict]]:
     return [], []
 
 
-# Patrones para detectar secciones en párrafos (ej: "Titulo:", "Descripción:", "Criterios:")
+# Patrones para detectar secciones en párrafos (ej: "Titulo:", "Descripción:", "Criterios:", "Reglas de negocio:")
 SECTION_PATTERN = re.compile(
-    r"^(titulo|título|descripción|descripcion|criterios|notas|observaciones|definición|definicion)\s*:?\s*(.*)$",
+    r"^(titulo|título|descripción|descripcion|criterios|reglas de negocio|notas|observaciones|definición|definicion)\s*:?\s*(.*)$",
     re.IGNORECASE
 )
 
@@ -143,7 +145,7 @@ def _extract_from_paragraphs(doc: Document, initiative_name: str) -> tuple[list[
     Busca patrones como "HU-001", "Historia 1", o secciones por títulos.
     Detecta también "Titulo:", "Descripción:", "Criterios:" para estructurar el contenido.
     """
-    headers = ["ID", "Titulo", "Descripción", "Criterios de aceptación", "Notas"]
+    headers = ["ID", "Titulo", "Descripción", "Criterios de aceptación", "Reglas de Negocio", "Notas"]
     hus = []
     current = {}
     current_id = ""
@@ -157,6 +159,8 @@ def _extract_from_paragraphs(doc: Document, initiative_name: str) -> tuple[list[
             return "Descripción"
         if k in ("criterios", "criterios de aceptación"):
             return "Criterios de aceptación"
+        if k in ("reglas de negocio",):
+            return "Reglas de Negocio"
         if k in ("notas", "observaciones"):
             return "Notas"
         if k in ("definición", "definicion"):
@@ -177,6 +181,7 @@ def _extract_from_paragraphs(doc: Document, initiative_name: str) -> tuple[list[
                 "Titulo": current.get("Titulo", current_id),
                 "Descripción": desc or "",
                 "Criterios de aceptación": current.get("Criterios de aceptación", ""),
+                "Reglas de Negocio": current.get("Reglas de Negocio", ""),
                 "Notas": current.get("Notas", ""),
             })
         current = {}
@@ -235,6 +240,7 @@ def _extract_from_paragraphs(doc: Document, initiative_name: str) -> tuple[list[
                 "Titulo": initiative_name or "Iniciativa desde Word",
                 "Descripción": full_text[:2000],
                 "Criterios de aceptación": "",
+                "Reglas de Negocio": "",
                 "Notas": "",
             }]
 
@@ -270,6 +276,14 @@ def _find_best_common_column(word_key: str, common_headers: list[str]) -> str | 
             if any(k in _normalize_header(h) for k in DESC_KEYWORDS):
                 return h
     if any(k in w for k in CRITERIA_KEYWORDS):
+        for h in common_headers:
+            if any(k in _normalize_header(h) for k in CRITERIA_KEYWORDS):
+                return h
+    if any(k in w for k in REGLA_KEYWORDS):
+        for h in common_headers:
+            ch = _normalize_header(h)
+            if "reglas" in ch and "negocio" in ch:
+                return h
         for h in common_headers:
             if any(k in _normalize_header(h) for k in CRITERIA_KEYWORDS):
                 return h
@@ -377,11 +391,13 @@ def create_excel_sheet_from_word(
         cell.font = Font(bold=True, name="Arial", size=10)
         cell.alignment = Alignment(wrap_text=True, vertical="center")
 
-    # Filas de datos
+    # Filas de datos (sanitizar para evitar caracteres que rompen Excel)
+    from hu_analyzer import _sanitize_for_excel
     for row_idx, row in enumerate(rows, DATA_START_ROW):
         for col_idx, h in enumerate(headers, 1):
             val = row.get(h, "")
-            ws.cell(row=row_idx, column=col_idx, value=str(val) if val else "")
+            raw = str(val) if val else ""
+            ws.cell(row=row_idx, column=col_idx, value=_sanitize_for_excel(raw))
         ws.row_dimensions[row_idx].height = 80
 
     # Ajustar anchos de columna

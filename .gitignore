@@ -20,8 +20,8 @@ venv/
 .venv/
 env/
 
-# Outputs (opcional: descomentar si no quieres versionar resultados)
-# Output/*.xlsx
+# Outputs (archivos generados por análisis — no subir a deploy)
+Output/*.xlsx
 
 # HU Speed Analysis (aprendizaje local por máquina)
 .hu_analyzer_speed.json
