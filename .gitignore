@@ -23,6 +23,11 @@ env/
 # Outputs (archivos generados por análisis — no subir a deploy)
 Output/*.xlsx
 
+# Datos de negocio — NUNCA subir a repo público
+Raw Data/
+mi_proyecto.zip
+HUs_Compilado_analizado.xlsx
+
 # HU Speed Analysis (aprendizaje local por máquina)
 .hu_analyzer_speed.json
 
