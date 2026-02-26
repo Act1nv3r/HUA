@@ -294,6 +294,8 @@ Tienes el resumen del análisis de HUs por iniciativa. Para CADA iniciativa debe
 3. Señale errores, inconsistencias o problemas en la información/data si los detectas (ej: IDs duplicados, datos faltantes, contradicciones, HUs mal estructuradas).
 4. Sea directo y ejecutivo — como si respondieras en 30 segundos en el elevador.
 
+CONTEXTO MVP: Si el resumen indica que solo se consideran HUs de Fase 1/MVP, enfócate exclusivamente en esas HUs para tu análisis. Las demás HUs tienen calificación individual pero no se incluyen en el overall de la iniciativa.
+
 Tono: profesional, constructivo, orientado a acción. Si todo va bien, dilo. Si hay riesgos o gaps, dilo sin dramatizar.
 IMPORTANTE: En analisis_ejecutivo NO uses comillas dobles (") dentro del texto; evítalas para que el JSON sea válido.
 Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después.
@@ -371,6 +373,33 @@ def _find_id_column(headers: list[str]) -> int:
         if h_lower in ("id", "no. hu", "no hu", "hu-id", "hu id", "código", "codigo"):
             return i
     return 0
+
+
+# Nombres de columna que indican Fase 1 / MVP (MVP = Fase 1)
+MVP_FASE_HEADERS = ("fase", "fase 1", "mvp", "fase/mvp", "fase 1 / mvp", "alcance mvp", "alcance")
+
+def _find_mvp_fase_column(headers: list[str]) -> int | None:
+    """Encuentra la columna que indica si la HU va en Fase 1 o MVP. Retorna índice o None."""
+    for i, h in enumerate(headers):
+        h_lower = (h or "").strip().lower()
+        if h_lower in MVP_FASE_HEADERS or "mvp" in h_lower or "fase 1" in h_lower:
+            return i
+    return None
+
+
+def _is_mvp_value(val) -> bool:
+    """Indica si el valor de la celda significa que la HU va en Fase 1 / MVP."""
+    if val is None:
+        return False
+    s = str(val).strip().lower()
+    if not s:
+        return False
+    # Valores que indican MVP/Fase 1
+    if s in ("1", "si", "sí", "s", "x", "✓", "yes", "true", "mvp", "fase 1", "fase1"):
+        return True
+    if "fase 1" in s or "mvp" in s:
+        return True
+    return False
 
 
 def _normalize_hu_id(hu_id: str) -> str:
@@ -460,6 +489,7 @@ def read_sheet_hus(ws, sheet_name: str) -> list[dict]:
         for cell in ws[header_row]
     ]
     id_col = _find_id_column(headers)
+    mvp_col = _find_mvp_fase_column(headers)
     data_start = header_row + 1
 
     hus = []
@@ -474,6 +504,12 @@ def read_sheet_hus(ws, sheet_name: str) -> list[dict]:
             if header:
                 val = row[col_idx].value if col_idx < len(row) else None
                 hu[header] = str(val).strip() if val else ""
+        # MVP/Fase 1: si existe columna, solo las marcadas cuentan para overall; si no existe, todas
+        if mvp_col is not None:
+            val = row[mvp_col].value if mvp_col < len(row) else None
+            hu["_is_mvp"] = _is_mvp_value(val)
+        else:
+            hu["_is_mvp"] = True  # Sin columna MVP: todas cuentan (retrocompat)
         hus.append(hu)
 
     return hus
@@ -671,7 +707,8 @@ def score_to_level(score: float) -> str:
 
 
 def compute_total_score(scores: dict) -> float:
-    """Score total ponderado: convierte scores 0-10 a 0-100."""
+    """Score total ponderado: convierte scores 0-10 a 0-100.
+    Usa DIMENSION_WEIGHTS (debe tener las mismas claves que devuelve la IA en scores)."""
     total = sum(
         scores.get(dim, 0) * 10 * weight
         for dim, weight in DIMENSION_WEIGHTS.items()
@@ -775,10 +812,11 @@ def _build_initiative_summary_for_executive(sheet_name: str, results: list[dict]
     return "\n".join(lines)
 
 
-def generate_executive_analysis(client: anthropic.Anthropic, by_sheet: dict[str, list[dict]], silent: bool = False) -> dict[str, str]:
+def generate_executive_analysis(client: anthropic.Anthropic, by_sheet: dict[str, list[dict]], silent: bool = False, mvp_filtered: bool = False) -> dict[str, str]:
     """
     Genera un párrafo de análisis ejecutivo por iniciativa.
     Retorna dict[nombre_iniciativa] -> párrafo.
+    mvp_filtered: si True, el resumen solo incluye HUs de Fase 1/MVP.
     """
     if not by_sheet:
         return {}
@@ -797,7 +835,8 @@ def generate_executive_analysis(client: anthropic.Anthropic, by_sheet: dict[str,
     if not summaries:
         return {}
 
-    prompt = "Resumen del análisis de HUs por iniciativa:\n\n" + "\n\n---\n\n".join(summaries)
+    mvp_note = "\n\n⚠️ Solo se consideran HUs de Fase 1/MVP para este resumen. Las demás HUs tienen calificación individual pero no se incluyen en el overall.\n\n" if mvp_filtered else ""
+    prompt = f"Resumen del análisis de HUs por iniciativa:{mvp_note}\n\n" + "\n\n---\n\n".join(summaries)
 
     try:
         msg = client.messages.create(
@@ -1076,9 +1115,15 @@ def create_synthesis_sheet(wb, all_results: list[dict]):
         ws["A1"].value = "Sin datos válidos para mostrar."
         return
 
-    # Agrupar por iniciativa (hoja)
+    # Solo HUs de Fase 1/MVP para overall (si existe columna MVP/Fase)
+    has_mvp_filter = any(not r.get("_is_mvp", True) for r in valid)
+    mvp_valid = [r for r in valid if r.get("_is_mvp", True)] if has_mvp_filter else valid
+    if has_mvp_filter and not mvp_valid:
+        mvp_valid = valid  # Fallback: si ninguna es MVP, usar todas
+
+    # Agrupar por iniciativa (hoja) — para overall usamos mvp_valid
     by_sheet: dict[str, list] = {}
-    for r in valid:
+    for r in mvp_valid:
         by_sheet.setdefault(r.get("_sheet", "Sin hoja"), []).append(r)
 
     cur = 1  # cursor de fila actual
@@ -1092,9 +1137,11 @@ def create_synthesis_sheet(wb, all_results: list[dict]):
 
     ws.row_dimensions[cur].height = 16
     ws.merge_cells(f"A{cur}:M{cur}")
+    mvp_note = "  |  ⚡ Solo HUs Fase 1/MVP para promedios" if has_mvp_filter else ""
     ws[f"A{cur}"].value = (
         f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}  |  "
         f"HUs analizadas: {len(valid)}  |  "
+        f"HUs MVP (overall): {len(mvp_valid)}{mvp_note}  |  "
         f"Iniciativas: {', '.join(by_sheet.keys())}"
     )
     ws[f"A{cur}"].font = Font(italic=True, name="Arial", size=9, color="595959")
@@ -1109,18 +1156,18 @@ def create_synthesis_sheet(wb, all_results: list[dict]):
     _h1(ws[f"A{cur}"], "▌ A.  MÉTRICAS GLOBALES")
     cur += 1
 
-    all_scores = [r["score_total"] for r in valid]
+    all_scores = [r["score_total"] for r in mvp_valid]
     nivel_counts: dict[str, int] = {}
-    for r in valid:
+    for r in mvp_valid:
         n = r.get("nivel", "")
         nivel_counts[n] = nivel_counts.get(n, 0) + 1
 
-    avg_global = sum(all_scores) / len(all_scores)
+    avg_global = sum(all_scores) / len(all_scores) if all_scores else 0
 
     kpi_data = [
         ("Score Promedio Global",     f"{avg_global:.1f} / 100",                         "2E75B6"),
-        ("Score Máximo",              f"{max(all_scores):.0f} / 100",                    "375623"),
-        ("Score Mínimo",              f"{min(all_scores):.0f} / 100",                    "843C0C"),
+        ("Score Máximo",              f"{max(all_scores):.0f} / 100" if all_scores else "N/A", "375623"),
+        ("Score Mínimo",              f"{min(all_scores):.0f} / 100" if all_scores else "N/A", "843C0C"),
         ("🟢  Excelentes  (90-100)", f"{nivel_counts.get('🟢 Excelente', 0)} HUs",      "375623"),
         ("🔵  Completas   (75-89)",  f"{nivel_counts.get('🔵 Completo', 0)} HUs",       "1F3864"),
         ("🟡  Aceptables  (55-74)",  f"{nivel_counts.get('🟡 Aceptable', 0)} HUs",      "9C6500"),
@@ -1200,8 +1247,8 @@ def create_synthesis_sheet(wb, all_results: list[dict]):
             criticas_txt = "✅ Ninguna"
 
         _data(ws[f"A{cur}"], sheet_idx, align="center", bg=fill)
-        _data(ws[f"B{cur}"], f"{sheet_name}  ({len(sheet_results)} HUs)",
-              bold=True, bg=fill)
+        hu_label = f"{sheet_name}  ({len(sheet_results)} HUs MVP)" if has_mvp_filter else f"{sheet_name}  ({len(sheet_results)} HUs)"
+        _data(ws[f"B{cur}"], hu_label, bold=True, bg=fill)
 
         fc_t, bg_t = _score_total_color(avg_total)
         _data(ws[f"C{cur}"], round(avg_total, 1), bold=True, align="center",
@@ -1231,13 +1278,14 @@ def create_synthesis_sheet(wb, all_results: list[dict]):
         cell_crit.border = _thin_border()
         cur += 1
 
-    # Fila de PROMEDIO GENERAL
+    # Fila de PROMEDIO GENERAL (usa mvp_valid para consistencia con overall)
     ws.row_dimensions[cur].height = 28
-    avg_grand = sum(all_scores) / len(all_scores)
+    avg_grand = sum(all_scores) / len(all_scores) if all_scores else 0
+    n_mvp = len(mvp_valid)
     avg_grand_dims = {
-        d: sum(r.get("scores", {}).get(d, 0) for r in valid) / len(valid)
+        d: sum(r.get("scores", {}).get(d, 0) for r in mvp_valid) / n_mvp
         for d in DIMENSIONS
-    }
+    } if n_mvp else {d: 0 for d in DIMENSIONS}
     ws.merge_cells(f"A{cur}:B{cur}")
     _data(ws[f"A{cur}"], "▶  PROMEDIO GENERAL", bold=True,
           bg="1F3864", fc="FFFFFF", align="center", size=10)
@@ -1452,6 +1500,7 @@ def run(input_path: str, output_path: str,
         result["_sheet"] = hu["_sheet"]
         result["_row"] = hu["_row"]
         result["_hu_id"] = hu["_hu_id"]
+        result["_is_mvp"] = hu.get("_is_mvp", True)
         return (idx, result)
 
     results_by_idx: dict[int, dict] = {}
@@ -1484,6 +1533,7 @@ def run(input_path: str, output_path: str,
                 results_by_idx[idx]["_sheet"] = hu["_sheet"]
                 results_by_idx[idx]["_row"] = hu["_row"]
                 results_by_idx[idx]["_hu_id"] = hu["_hu_id"]
+                results_by_idx[idx]["_is_mvp"] = hu.get("_is_mvp", True)
                 log(f"  [{completed:3}/{total_hus}]  {hu['_sheet']:20} | {hu['_hu_id']:10} | ⛔ Error: {e}")
 
             hu_speed = update_hu_speed(elapsed)
@@ -1519,9 +1569,13 @@ def run(input_path: str, output_path: str,
     completas   = sum(1 for r in valid if 75 <= r["score_total"] < 90)
     aceptables  = sum(1 for r in valid if 55 <= r["score_total"] < 75)
 
+    # Para síntesis ejecutiva: solo HUs MVP/Fase 1 (si existe columna)
+    has_mvp_filter = any(not r.get("_is_mvp", True) for r in valid)
+    mvp_valid = [r for r in valid if r.get("_is_mvp", True)] if has_mvp_filter else valid
+
     by_sheet = {}
     by_sheet_full: dict[str, list[dict]] = {}
-    for r in valid:
+    for r in mvp_valid:
         s = r.get("_sheet", "Sin hoja")
         if s not in by_sheet:
             by_sheet[s] = {"count": 0, "avg": 0, "scores": []}
@@ -1534,7 +1588,9 @@ def run(input_path: str, output_path: str,
         del d["scores"]
 
     log("\n📋  Generando análisis ejecutivo por iniciativa...")
-    executive_by_initiative = generate_executive_analysis(client, by_sheet_full, silent=silent)
+    if has_mvp_filter:
+        log("  ⚡ Solo HUs Fase 1/MVP para síntesis ejecutiva")
+    executive_by_initiative = generate_executive_analysis(client, by_sheet_full, silent=silent, mvp_filtered=has_mvp_filter)
 
     log(f"""
 {"═"*60}
