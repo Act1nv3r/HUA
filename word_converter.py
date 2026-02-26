@@ -18,6 +18,7 @@ STANDARD_HEADERS = [
     "Descripción",
     "Criterios de aceptación",
     "Reglas de Negocio",
+    "Fase 1 / MVP",  # Si = HU va en MVP; usado para filtrar overall en síntesis
     "Notas",
 ]
 
@@ -47,6 +48,12 @@ HEADER_ALIASES = {
     "criterios": "Criterios de aceptación",
     "aceptación": "Criterios de aceptación",
     "reglas de negocio": "Reglas de Negocio",
+    "fase": "Fase 1 / MVP",
+    "fase 1": "Fase 1 / MVP",
+    "mvp": "Fase 1 / MVP",
+    "fase/mvp": "Fase 1 / MVP",
+    "fase 1 / mvp": "Fase 1 / MVP",
+    "alcance mvp": "Fase 1 / MVP",
     "notas": "Notas",
     "observaciones": "Notas",
     "comentarios": "Notas",
@@ -59,6 +66,7 @@ DESC_KEYWORDS = ("descripción", "descripcion", "historia", "objetivo", "definic
 TITLE_KEYWORDS = ("titulo", "título", "etapa", "módulo", "modulo")
 CRITERIA_KEYWORDS = ("criterios", "aceptación", "aceptacion")
 REGLA_KEYWORDS = ("reglas", "negocio")
+MVP_FASE_KEYWORDS = ("fase", "mvp", "alcance")
 NOTES_KEYWORDS = ("notas", "observaciones", "comentarios")
 
 
@@ -132,9 +140,9 @@ def _extract_from_tables(doc: Document) -> tuple[list[str], list[dict]]:
     return [], []
 
 
-# Patrones para detectar secciones en párrafos (ej: "Titulo:", "Descripción:", "Criterios:", "Reglas de negocio:")
+# Patrones para detectar secciones en párrafos (ej: "Titulo:", "Descripción:", "Criterios:", "Fase 1:", "MVP:")
 SECTION_PATTERN = re.compile(
-    r"^(titulo|título|descripción|descripcion|criterios|reglas de negocio|notas|observaciones|definición|definicion)\s*:?\s*(.*)$",
+    r"^(titulo|título|descripción|descripcion|criterios|reglas de negocio|fase|fase 1|mvp|notas|observaciones|definición|definicion)\s*:?\s*(.*)$",
     re.IGNORECASE
 )
 
@@ -145,7 +153,7 @@ def _extract_from_paragraphs(doc: Document, initiative_name: str) -> tuple[list[
     Busca patrones como "HU-001", "Historia 1", o secciones por títulos.
     Detecta también "Titulo:", "Descripción:", "Criterios:" para estructurar el contenido.
     """
-    headers = ["ID", "Titulo", "Descripción", "Criterios de aceptación", "Reglas de Negocio", "Notas"]
+    headers = ["ID", "Titulo", "Descripción", "Criterios de aceptación", "Reglas de Negocio", "Fase 1 / MVP", "Notas"]
     hus = []
     current = {}
     current_id = ""
@@ -161,6 +169,8 @@ def _extract_from_paragraphs(doc: Document, initiative_name: str) -> tuple[list[
             return "Criterios de aceptación"
         if k in ("reglas de negocio",):
             return "Reglas de Negocio"
+        if k in ("fase", "fase 1", "mvp"):
+            return "Fase 1 / MVP"
         if k in ("notas", "observaciones"):
             return "Notas"
         if k in ("definición", "definicion"):
@@ -182,6 +192,7 @@ def _extract_from_paragraphs(doc: Document, initiative_name: str) -> tuple[list[
                 "Descripción": desc or "",
                 "Criterios de aceptación": current.get("Criterios de aceptación", ""),
                 "Reglas de Negocio": current.get("Reglas de Negocio", ""),
+                "Fase 1 / MVP": current.get("Fase 1 / MVP", ""),
                 "Notas": current.get("Notas", ""),
             })
         current = {}
@@ -241,6 +252,7 @@ def _extract_from_paragraphs(doc: Document, initiative_name: str) -> tuple[list[
                 "Descripción": full_text[:2000],
                 "Criterios de aceptación": "",
                 "Reglas de Negocio": "",
+                "Fase 1 / MVP": "",
                 "Notas": "",
             }]
 
@@ -286,6 +298,11 @@ def _find_best_common_column(word_key: str, common_headers: list[str]) -> str | 
                 return h
         for h in common_headers:
             if any(k in _normalize_header(h) for k in CRITERIA_KEYWORDS):
+                return h
+    if any(k in w for k in MVP_FASE_KEYWORDS):
+        for h in common_headers:
+            ch = _normalize_header(h)
+            if "fase" in ch or "mvp" in ch:
                 return h
     if any(k in w for k in NOTES_KEYWORDS):
         for h in common_headers:

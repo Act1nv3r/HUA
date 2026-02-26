@@ -125,6 +125,15 @@ Fila 8:    Encabezados de columnas
 Fila 9+:   Datos de HUs (ID que empiece con "HU")
 ```
 
+### Columna Fase 1 / MVP (opcional)
+
+Si tu Excel incluye una columna **Fase**, **MVP** o **Fase 1 / MVP**:
+- **Todas las HUs** reciben calificación individual.
+- **Solo las marcadas como MVP/Fase 1** (valores: Sí, 1, X, ✓, MVP, Fase 1) se consideran para:
+  - Promedios y métricas globales en la Síntesis Ejecutiva
+  - Análisis ejecutivo por iniciativa
+- Si no existe la columna, todas las HUs se incluyen en el overall (comportamiento anterior).
+
 ---
 
 ## Output generado
