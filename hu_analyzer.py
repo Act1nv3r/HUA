@@ -185,6 +185,10 @@ IMPORTANTE: La DEFINICIÓN FUNCIONAL debe incluir explícitamente: (1) Mensajes 
 (2) Flujos alternos, (3) Mecanismos de medición y monitoreo. Evalúa si el PO los definió.
 También evalúa CAPAS TECNOLÓGICAS INVOLUCRADAS. No pidas specs técnicas — eso se define después.
 
+COLUMNAS DEL EXCEL: Cada documento puede tener headers distintos (ID, Título, Descripción,
+Reglas de Negocio, Alcance, Fase, Dependencias, etc.). Usa TODA la información de la fila.
+Analiza la HU en su totalidad, incluyendo columnas adicionales que el Excel pueda tener.
+
 Contexto Actinver:
 - Core: Core Bancario | Integraciones: RENAPO, INE, SAT, Buró, SPEI, biométricos
 - Notificaciones: push, SMS, email | Regulatorio: CUB, PUI, LFPDPPP, PLD/AML
@@ -194,12 +198,18 @@ Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después del JSON."""
 
 
 def build_analysis_prompt(hu: dict, prev_data: dict = None) -> str:
-    hu_text = "\n".join(
-        f"  {k}: {v}"
-        for k, v in hu.items()
-        if v and str(v).strip() not in ("nan", "None", "")
-        and not k.startswith("_")
-    )
+    # Headers = columnas del Excel (cada documento puede tener columnas distintas)
+    headers = [k for k in hu.keys() if not k.startswith("_")]
+    # Incluir TODA la fila: cada columna con su valor (vacío = "(vacío)" para que la IA vea la estructura)
+    hu_lines = []
+    for h in headers:
+        v = hu.get(h, "")
+        if v is None or (isinstance(v, str) and str(v).strip() in ("", "nan", "None")):
+            v = "(vacío)"
+        else:
+            v = str(v).strip()
+        hu_lines.append(f"  {h}: {v}")
+    hu_text = "\n".join(hu_lines)
 
     prev_block = ""
     if prev_data:
@@ -225,7 +235,10 @@ El flujo completo se arma con todas las HUs. Evalúa qué es razonable para ESTA
 (no penalices por info que puede estar en otra etapa posterior o anterior).
 
 ═══ HISTORIA DE USUARIO ═══
-(Se incluye toda la información de la fila; usa todas las columnas presentes para el análisis.)
+Columnas de este documento: {", ".join(headers)}
+IMPORTANTE: Cada Excel puede tener columnas distintas. Analiza la fila COMPLETA usando TODAS las columnas.
+Si hay columnas adicionales (Reglas de Negocio, Alcance, Dependencias, Fase, etc.), inclúyelas en tu evaluación.
+
 {hu_text}
 ═══════════════════════════
 {prev_block}
