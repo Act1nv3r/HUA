@@ -185,9 +185,9 @@ IMPORTANTE: La DEFINICIÓN FUNCIONAL debe incluir explícitamente: (1) Mensajes 
 (2) Flujos alternos, (3) Mecanismos de medición y monitoreo. Evalúa si el PO los definió.
 También evalúa CAPAS TECNOLÓGICAS INVOLUCRADAS. No pidas specs técnicas — eso se define después.
 
-COLUMNAS DEL EXCEL: Cada documento puede tener headers distintos (ID, Título, Descripción,
-Reglas de Negocio, Alcance, Fase, Dependencias, etc.). Usa TODA la información de la fila.
-Analiza la HU en su totalidad, incluyendo columnas adicionales que el Excel pueda tener.
+COLUMNAS DEL EXCEL: Cada documento puede tener headers distintos. LEE el contenido de cada columna.
+Si existe "Mensajes de Error" con texto → mensajes de error definidos. Si "Reglas de Negocio" tiene contenido → criterios definidos.
+NO asumas que falta algo: verifica el texto de cada celda antes de indicar brechas.
 
 Contexto Actinver:
 - Core: Core Bancario | Integraciones: RENAPO, INE, SAT, Buró, SPEI, biométricos
@@ -236,17 +236,21 @@ El flujo completo se arma con todas las HUs. Evalúa qué es razonable para ESTA
 
 ═══ HISTORIA DE USUARIO ═══
 Columnas de este documento: {", ".join(headers)}
-IMPORTANTE: Cada Excel puede tener columnas distintas. Analiza la fila COMPLETA usando TODAS las columnas.
-Si hay columnas adicionales (Reglas de Negocio, Alcance, Dependencias, Fase, etc.), inclúyelas en tu evaluación.
+
+CRÍTICO — LEE EL CONTENIDO DE CADA COLUMNA (no solo los headers):
+- Cada celda puede tener información. DEBES leer el texto de cada columna antes de evaluar.
+- Si una columna se llama "Mensajes de Error", "Mensaje de error" o similar y tiene contenido → mensajes de error SÍ definidos.
+- Si "Reglas de Negocio", "Flujos Alternos", "Criterios de Aceptación", etc. tienen texto → usa ese contenido.
+- NO indiques "falta X" si la columna correspondiente tiene contenido. Verifica el valor de cada celda.
 
 {hu_text}
 ═══════════════════════════
 {prev_block}
 Evalúa las 6 dimensiones (score 0-10) desde lo que el PO debe definir:
 
-1. DEFINICIÓN FUNCIONAL (35%): Debe incluir explícitamente: (a) Mensajes de error,
-   (b) Flujos alternos, (c) Mecanismos de medición y monitoreo. Además: flujo principal,
-   reglas de negocio, casos límite. ¿Está claro qué hace el sistema?
+1. DEFINICIÓN FUNCIONAL (35%): (a) Mensajes de error, (b) Flujos alternos, (c) Medición/monitoreo.
+   Si el Excel tiene columna "Mensajes de Error" (o "Mensaje de error", etc.) con contenido → SÍ están definidos.
+   Si tiene "Flujos Alternos" con contenido → SÍ están definidos. LEE cada columna antes de evaluar.
 
 2. CAPAS TECNOLÓGICAS INVOLUCRADAS (25%): ¿El PO identificó qué capas toca?
    (UI, Backend, Integraciones como RENAPO/SAT/Core Bancario, Seguridad, Notificaciones)

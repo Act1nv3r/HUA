@@ -177,6 +177,7 @@ CONFIG_VERSIONS = {
             "Contexto de sistemas: Core bancario COBIS; integraciones RENAPO/INE/SAT/Buró/SPEI/"
             "biométricos; regulatorio CUB Art.51 BIS 6/PUI/LFPDPPP/PLD-AML; "
             "productos Onboarding N4/Cuenta Remunerada/Crédito Simple/TDC Actinver. "
+            "LEE el contenido de cada columna del Excel. Si 'Mensajes de Error' tiene texto, SÍ están definidos. "
             "Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después del JSON."
         ),
     },
@@ -215,20 +216,29 @@ CONFIG_VERSIONS = {
             "Regulatorio: CNBV/CUB, PLD/AML, LFPDPPP — solo verificar si aplica, sin detalles técnicos. "
             "NO pidas al PO: endpoints, schemas de API, timeouts, cifrado, datos de prueba técnicos ni wireframes. "
             "TONO: Directo, motivador y claro. Sin jerga técnica. "
+            "LEE el contenido de cada columna. Si 'Mensajes de Error' tiene texto, SÍ están definidos. "
             "Responde ÚNICAMENTE con JSON válido. Sin texto antes ni después del JSON."
         ),
     },
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# HEADER
+# HEADER — Logo Actinver (esquina superior izquierda) + Título
 # ═══════════════════════════════════════════════════════════════════════════
 
-st.markdown('<p class="main-header">📊 HU Analyzer</p>', unsafe_allow_html=True)
-st.markdown(
-    '<p class="sub-header">Sube Excel y/o Word de HUs → La IA analiza definición funcional y capas tecnológicas → Descarga el resultado con análisis completo</p>',
-    unsafe_allow_html=True,
-)
+_logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo-actinver.svg")
+_col_logo, _col_header = st.columns([1, 5])
+with _col_logo:
+    if os.path.exists(_logo_path):
+        st.image(_logo_path, width=140)
+    else:
+        st.markdown('<p style="color:#E6C78A;font-weight:700;font-size:1.2rem;">ACTINVER</p>', unsafe_allow_html=True)
+with _col_header:
+    st.markdown('<p class="main-header">📊 HU Analyzer</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="sub-header">Sube Excel y/o Word de HUs → La IA analiza definición funcional y capas tecnológicas → Descarga el resultado con análisis completo</p>',
+        unsafe_allow_html=True,
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════
 # UPLOAD
